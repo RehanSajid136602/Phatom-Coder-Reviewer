@@ -224,28 +224,15 @@ export function useAgentStream() {
         const decoder = new TextDecoder();
         let accumulated = '';
         let buffer = '';
-        let shouldStop = false;
 
-        while (!shouldStop) {
+        while (true) {
           // Check if stream was aborted
           if (abortController.signal.aborted) {
             break;
           }
 
-          // Read with timeout to prevent hanging
-          const readPromise = reader.read();
-          const timeoutPromise = new Promise<{ done: true; value: undefined }>((resolve) => {
-            setTimeout(() => resolve({ done: true, value: undefined }), 3000);
-          });
-
-          const { done, value } = await Promise.race([readPromise, timeoutPromise]);
-          
+          const { done, value } = await reader.read();
           if (done) break;
-          if (!value) {
-            // Timeout occurred
-            shouldStop = true;
-            break;
-          }
 
           const chunk = decoder.decode(value, { stream: true });
           buffer += chunk;
@@ -397,8 +384,7 @@ export function useAgentStream() {
                     },
                   }));
                   isStreamingRef.current = false;
-                  shouldStop = true; // Exit the read loop
-                  break;
+                  break; // Exit the while loop via done check
                 }
 
                 default: {
@@ -424,8 +410,8 @@ export function useAgentStream() {
           }
         }
 
-        // Process any remaining buffer (only if not already stopped by review_complete)
-        if (buffer && !shouldStop) {
+        // Process any remaining buffer
+        if (buffer) {
           const trimmedBuffer = buffer.trim();
           // Handle [DONE] signal in buffer
           if (trimmedBuffer !== 'data: [DONE]' && trimmedBuffer !== '[DONE]') {
@@ -435,7 +421,7 @@ export function useAgentStream() {
         }
 
         // Only mark as complete if not already marked (by review_complete event)
-        if (isStreamingRef.current && !shouldStop) {
+        if (isStreamingRef.current) {
           setState((prev) => ({
             ...prev,
             isStreaming: false,
