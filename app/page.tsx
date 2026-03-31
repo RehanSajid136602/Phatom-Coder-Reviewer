@@ -20,6 +20,56 @@ export default function Home() {
 
   const { state: agentState, startStream, cancelReview, resetState } = useAgentStream();
 
+  // Load persisted code from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedCode = localStorage.getItem('phantom_code');
+      const savedLanguage = localStorage.getItem('phantom_language');
+      if (savedCode) {
+        setCode(savedCode);
+        if (savedLanguage) {
+          setLanguage(savedLanguage as Language);
+        } else {
+          const detected = detectLanguage(savedCode);
+          if (detected !== 'other') {
+            setLanguage(detected);
+          }
+        }
+      }
+    } catch {
+      // localStorage not available
+    }
+  }, []);
+
+  // Reset agent state on mount to ensure clean state after refresh
+  useEffect(() => {
+    resetState();
+  }, [resetState]);
+
+  // Persist code to localStorage on change
+  useEffect(() => {
+    try {
+      if (code) {
+        localStorage.setItem('phantom_code', code);
+      } else {
+        localStorage.removeItem('phantom_code');
+      }
+    } catch {
+      // localStorage not available
+    }
+  }, [code]);
+
+  // Persist language to localStorage on change
+  useEffect(() => {
+    try {
+      if (language && language !== 'other') {
+        localStorage.setItem('phantom_language', language);
+      }
+    } catch {
+      // localStorage not available
+    }
+  }, [language]);
+
   const handleCodeChange = useCallback((newCode: string) => {
     setCode(newCode);
     const detected = detectLanguage(newCode);
@@ -90,6 +140,12 @@ export default function Home() {
   const clearCode = useCallback(() => {
     setCode('');
     setHighlightedLines(new Set());
+    try {
+      localStorage.removeItem('phantom_code');
+      localStorage.removeItem('phantom_language');
+    } catch {
+      // localStorage not available
+    }
   }, []);
 
   // Keyboard shortcuts
