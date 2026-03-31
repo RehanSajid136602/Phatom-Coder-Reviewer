@@ -463,6 +463,12 @@ export function useAgentStream() {
       abortControllerRef.current = null;
     }
     isStreamingRef.current = false;
+    // Update state immediately so UI responds
+    setState((prev) => ({
+      ...prev,
+      isStreaming: false,
+      wasCancelled: true,
+    }));
   }, []);
 
   return {
