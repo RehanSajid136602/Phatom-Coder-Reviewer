@@ -122,11 +122,19 @@ export function useAgentStream() {
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const reviewHashRef = useRef<string | null>(null);
+  const isStreamingRef = useRef(false);
   const charCountRef = useRef(0);
   const lastUpdateRef = useRef(Date.now());
 
   const resetState = useCallback(() => {
+    // Cancel any ongoing stream first
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    isStreamingRef.current = false;
+    
     setState({
       agents: INITIAL_AGENTS.map((a) => ({ ...a })),
       merger: { ...INITIAL_MERGER },
@@ -149,21 +157,35 @@ export function useAgentStream() {
 
   const startStream = useCallback(
     async (code: string, language: string) => {
-      // Request deduplication — skip if same code already streaming
-      const hash = djb2(code + language);
-      if (state.isStreaming && hash === reviewHashRef.current) {
-        return;
+      // Cancel any existing stream before starting a new one
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
-      reviewHashRef.current = hash;
 
-      resetState();
+      // Reset state completely before starting new stream
+      isStreamingRef.current = false;
+      charCountRef.current = 0;
+      lastUpdateRef.current = Date.now();
 
-      setState((prev) => ({
-        ...prev,
+      setState({
+        agents: INITIAL_AGENTS.map((a) => ({ ...a, status: 'running' as AgentStatus, startTime: Date.now() })),
+        merger: { ...INITIAL_MERGER, status: 'idle' },
+        judge: { ...INITIAL_JUDGE, status: 'idle' },
+        totalRawIssues: 0,
+        judgeFiltered: 0,
         isStreaming: true,
+        isComplete: false,
         wasCancelled: false,
-        agents: prev.agents.map((a) => ({ ...a, status: 'running' as AgentStatus, startTime: Date.now() })),
-      }));
+        score: null,
+        streamedText: '',
+        liveTokens: 0,
+        cacheHit: false,
+        usedFallback: false,
+        fallbackModel: null,
+      });
+
+      isStreamingRef.current = true;
 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
@@ -204,6 +226,11 @@ export function useAgentStream() {
         let buffer = '';
 
         while (true) {
+          // Check if stream was aborted
+          if (abortController.signal.aborted) {
+            break;
+          }
+
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -347,6 +374,7 @@ export function useAgentStream() {
                     ...prev,
                     score: event.score || null,
                     isComplete: true,
+                    isStreaming: false,
                     liveTokens: Math.floor(charCountRef.current / 4),
                     merger: {
                       ...prev.merger,
@@ -355,6 +383,7 @@ export function useAgentStream() {
                       duration: prev.merger.startTime ? Date.now() - prev.merger.startTime : null,
                     },
                   }));
+                  isStreamingRef.current = false;
                   break;
                 }
 
@@ -391,12 +420,16 @@ export function useAgentStream() {
           }
         }
 
-        setState((prev) => ({
-          ...prev,
-          isStreaming: false,
-          isComplete: true,
-          liveTokens: Math.floor(charCountRef.current / 4),
-        }));
+        // Only mark as complete if not already marked (by review_complete event)
+        if (isStreamingRef.current) {
+          setState((prev) => ({
+            ...prev,
+            isStreaming: false,
+            isComplete: true,
+            liveTokens: Math.floor(charCountRef.current / 4),
+          }));
+          isStreamingRef.current = false;
+        }
       } catch (error) {
         const err = error as Error;
         if (err.name === 'AbortError') {
@@ -405,6 +438,7 @@ export function useAgentStream() {
             isStreaming: false,
             wasCancelled: true,
           }));
+          isStreamingRef.current = false;
         } else {
           console.error('Stream error:', error);
           setState((prev) => ({
@@ -414,18 +448,21 @@ export function useAgentStream() {
               prev.streamedText +
               `\n\n■ ERROR\nAnalysis failed: ${err.message}`,
           }));
+          isStreamingRef.current = false;
         }
       } finally {
         abortControllerRef.current = null;
-        reviewHashRef.current = null;
       }
     },
-    [resetState, state.isStreaming]
+    [] // Empty dependency array - no stale closures
   );
 
   const cancelReview = useCallback(() => {
-    abortControllerRef.current?.abort();
-    reviewHashRef.current = null;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    isStreamingRef.current = false;
   }, []);
 
   return {
