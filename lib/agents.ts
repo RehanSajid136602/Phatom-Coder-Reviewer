@@ -384,8 +384,8 @@ export const AGENT_CONFIGS: Record<AgentName, AgentConfig> = {
     fallbackModel: 'meta/llama-3.3-70b-instruct',
     systemPrompt: SECURITY_SYSTEM_PROMPT,
     temperature: 0.1,
-    maxTokens: 2000,
-    timeoutMs: 120000,
+    maxTokens: 1500,    // Reduced from 2000
+    timeoutMs: 60000,   // Reduced from 120000 (60s)
   },
   quality: {
     name: 'quality',
@@ -393,8 +393,8 @@ export const AGENT_CONFIGS: Record<AgentName, AgentConfig> = {
     fallbackModel: 'qwen/qwen2.5-coder-32b-instruct',
     systemPrompt: QUALITY_SYSTEM_PROMPT,
     temperature: 0.1,
-    maxTokens: 2000,
-    timeoutMs: 90000,
+    maxTokens: 1500,   // Reduced from 2000
+    timeoutMs: 45000,  // Reduced from 90000 (45s)
   },
   language: {
     name: 'language',
@@ -402,22 +402,22 @@ export const AGENT_CONFIGS: Record<AgentName, AgentConfig> = {
     fallbackModel: 'meta/llama-3.3-70b-instruct',
     systemPrompt: LANGUAGE_SYSTEM_PROMPT,
     temperature: 0.1,
-    maxTokens: 2000,
-    timeoutMs: 90000,
+    maxTokens: 1500,  // Reduced from 2000
+    timeoutMs: 45000, // Reduced from 90000 (45s)
   },
 };
 
 // Merger: Devstral 2 (agentic coding, multi-file synthesis)
 const MERGER_MODEL = 'mistralai/devstral-2-123b-instruct-2512';
 const MERGER_FALLBACK_MODEL = 'meta/llama-3.3-70b-instruct';
-const MERGER_MAX_TOKENS = 4000;
-const MERGER_TIMEOUT_MS = 180000;
+const MERGER_MAX_TOKENS = 2500;   // Reduced from 4000
+const MERGER_TIMEOUT_MS = 90000; // Reduced from 180000 (90s)
 
 // Judge: Llama 3.3 70B (reliable filtering)
 const JUDGE_MODEL = 'meta/llama-3.3-70b-instruct';
 const JUDGE_FALLBACK_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
-const JUDGE_MAX_TOKENS = 1500;
-const JUDGE_TIMEOUT_MS = 60000;
+const JUDGE_MAX_TOKENS = 1000;   // Reduced from 1500
+const JUDGE_TIMEOUT_MS = 30000;  // Reduced from 60000 (30s)
 
 // ── Code Preprocessing ──
 
