@@ -18,7 +18,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'code' | 'review'>('code');
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
-  const { state: agentState, startStream, cancelReview } = useAgentStream();
+  const { state: agentState, startStream, cancelReview, resetState } = useAgentStream();
 
   const handleCodeChange = useCallback((newCode: string) => {
     setCode(newCode);
@@ -71,10 +71,21 @@ export default function Home() {
 
   const handleAnalyze = useCallback(async () => {
     if (!code.trim() || agentState.isStreaming) return;
+    
+    // FULL RESET MODE: Cancel any ongoing stream and reset all state first
+    // This ensures a clean slate before starting new analysis
+    cancelReview(); // Abort any ongoing request
+    resetState();   // Reset all agent state to initial values
+    
+    // Reset all UI state to initial values
     setHighlightedLines(new Set());
     setActiveTab('review');
+    
+    // Small delay to allow state to settle before starting new stream
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     await startStream(code, language);
-  }, [code, language, agentState.isStreaming, startStream]);
+  }, [code, language, agentState.isStreaming, startStream, cancelReview, resetState]);
 
   const clearCode = useCallback(() => {
     setCode('');
