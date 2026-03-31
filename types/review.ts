@@ -99,3 +99,37 @@ export interface ErrorResponse {
   error: string;
   code: ApiErrorCode;
 }
+
+// Review result types
+export type VerdictSeverity = 'CRITICAL' | 'WARNING' | 'INFO' | 'SAFE';
+
+export interface ReviewIssue {
+  severity: 'CRITICAL' | 'WARNING' | 'INFO' | 'PRAISE';
+  line: string;
+  title: string;
+  description: string;
+  fix?: string;
+}
+
+export interface ReviewResult {
+  summary: string;
+  issues: ReviewIssue[];
+  suggestions: string;
+  verdict: string;
+  riskScore: number;
+  score: number;
+}
+
+// History types
+export interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  language: string;
+  codeSnippet: string;
+  verdict: VerdictSeverity;
+  riskScore: number;
+  criticalCount: number;
+  warningCount: number;
+  fullResult: ReviewResult;
+  codeSnapshot: string;
+}

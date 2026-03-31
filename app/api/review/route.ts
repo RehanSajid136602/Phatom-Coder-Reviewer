@@ -133,9 +133,11 @@ export async function POST(req: NextRequest) {
     });
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/event-stream',
+        'Content-Type': 'text/plain',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
+        'X-Cache': 'HIT',
+        'X-Cache-Latency': '0',
       },
     });
   }

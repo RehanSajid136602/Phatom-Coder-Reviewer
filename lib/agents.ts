@@ -41,10 +41,48 @@ SEVERITY: CRITICAL (immediate exploitation risk), WARNING (security weakness), I
 - When in doubt, flag it — better false positive than missed vulnerability
 - If NO issues found after thorough analysis, output exactly: NO_ISSUES_FOUND
 
+## AUTH COVERAGE SCAN
+For every route in the submitted code:
+1. Extract the path string from app.get/post/put/delete/use or router.*
+2. Flag as CRITICAL if path contains ANY of: admin, delete, purge, reset,
+   internal, manage, cache, exec, system, report, export, config, seed
+   AND no middleware matching: verify, auth, require, check, guard,
+   isAdmin, protect, jwt appears between the path and the handler
+3. Verify role check exists AFTER token decode — token presence alone is NOT auth
+4. If route calls exec(), spawn(), or eval() with user input → always CRITICAL
+   regardless of auth
+
 ## DO NOT FLAG
 - Missing comments on obvious code
 - Style preferences unrelated to security
-- Theoretical issues with no practical exploit path`;
+- Theoretical issues with no practical exploit path
+
+EXAMPLE of correct confidence calibration:
+
+BEFORE (wrong — flags uncertain things as CRITICAL):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [CRITICAL]
+
+AFTER (correct — calibrated severity):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [WARNING]  ← downgraded, not certain enough for CRITICAL
+
+RULE TO FOLLOW:
+## CONFIDENCE CALIBRATION
+Before assigning [CRITICAL], answer internally:
+  - Is this concretely exploitable right now, not just theoretically?
+  - Would a senior security engineer agree without hesitation?
+  - Is the vulnerable code actually reachable in this context?
+
+If all three → YES: emit [CRITICAL]
+If any → MAYBE: emit [WARNING]
+If unsure: emit [INFO] or omit entirely
+
+NEVER emit [CRITICAL] for:
+  - Style or naming issues
+  - Performance concerns
+  - Missing best practices that aren't security-relevant
+  - Patterns that look wrong but are context-safe`;
 
 const QUALITY_SYSTEM_PROMPT = `You are a senior software engineer reviewing code quality. Find ALL issues from code smells to architectural problems.
 
@@ -89,7 +127,34 @@ SEVERITY: CRITICAL (logic errors, data corruption), WARNING (code smells, perfor
 ## DO NOT FLAG
 - Missing JSDoc on private functions
 - Preference for one valid pattern over another
-- Issues already flagged by the security agent`;
+- Issues already flagged by the security agent
+
+EXAMPLE of correct confidence calibration:
+
+BEFORE (wrong — flags uncertain things as CRITICAL):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [CRITICAL]
+
+AFTER (correct — calibrated severity):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [WARNING]  ← downgraded, not certain enough for CRITICAL
+
+RULE TO FOLLOW:
+## CONFIDENCE CALIBRATION
+Before assigning [CRITICAL], answer internally:
+  - Is this concretely exploitable right now, not just theoretically?
+  - Would a senior security engineer agree without hesitation?
+  - Is the vulnerable code actually reachable in this context?
+
+If all three → YES: emit [CRITICAL]
+If any → MAYBE: emit [WARNING]
+If unsure: emit [INFO] or omit entirely
+
+NEVER emit [CRITICAL] for:
+  - Style or naming issues
+  - Performance concerns
+  - Missing best practices that aren't security-relevant
+  - Patterns that look wrong but are context-safe`;
 
 const LANGUAGE_SYSTEM_PROMPT = `You are a language and framework specialist. Identify the language/framework from the code, then conduct a framework-specific review.
 
@@ -141,7 +206,34 @@ SEVERITY: CRITICAL (framework violations, breaking changes), WARNING (suboptimal
 
 ## DO NOT FLAG
 - Personal style preferences that don't violate framework rules
-- Missing optional features that aren't required`;
+- Missing optional features that aren't required
+
+EXAMPLE of correct confidence calibration:
+
+BEFORE (wrong — flags uncertain things as CRITICAL):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [CRITICAL]
+
+AFTER (correct — calibrated severity):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [WARNING]  ← downgraded, not certain enough for CRITICAL
+
+RULE TO FOLLOW:
+## CONFIDENCE CALIBRATION
+Before assigning [CRITICAL], answer internally:
+  - Is this concretely exploitable right now, not just theoretically?
+  - Would a senior security engineer agree without hesitation?
+  - Is the vulnerable code actually reachable in this context?
+
+If all three → YES: emit [CRITICAL]
+If any → MAYBE: emit [WARNING]
+If unsure: emit [INFO] or omit entirely
+
+NEVER emit [CRITICAL] for:
+  - Style or naming issues
+  - Performance concerns
+  - Missing best practices that aren't security-relevant
+  - Patterns that look wrong but are context-safe`;
 
 const MERGER_SYSTEM_PROMPT = `You are a distinguished engineer synthesizing expert code reviews into one definitive report.
 
@@ -189,7 +281,34 @@ Scoring: Start at 10. Each CRITICAL: -2. Each WARNING: -0.5. Floor: 0.
 ## EDGE CASES
 - All agents say NO_ISSUES_FOUND → Still write summary, give score 9-10, praise good practices
 - Issues without line numbers → Use L?, mention "unable to determine line"
-- Malformed agent output → Extract what you can, note "partial analysis" in summary`;
+- Malformed agent output → Extract what you can, note "partial analysis" in summary
+
+EXAMPLE of correct confidence calibration:
+
+BEFORE (wrong — flags uncertain things as CRITICAL):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [CRITICAL]
+
+AFTER (correct — calibrated severity):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [WARNING]  ← downgraded, not certain enough for CRITICAL
+
+RULE TO FOLLOW:
+## CONFIDENCE CALIBRATION
+Before assigning [CRITICAL], answer internally:
+  - Is this concretely exploitable right now, not just theoretically?
+  - Would a senior security engineer agree without hesitation?
+  - Is the vulnerable code actually reachable in this context?
+
+If all three → YES: emit [CRITICAL]
+If any → MAYBE: emit [WARNING]
+If unsure: emit [INFO] or omit entirely
+
+NEVER emit [CRITICAL] for:
+  - Style or naming issues
+  - Performance concerns
+  - Missing best practices that aren't security-relevant
+  - Patterns that look wrong but are context-safe`;
 
 const JUDGE_SYSTEM_PROMPT = `You are a quality filter for code review findings. Evaluate each issue for actionability, accuracy, and signal-to-noise ratio.
 
@@ -217,7 +336,34 @@ JUDGE_STATS: {total_before} issues → {total_after} after filtering ({removed} 
 - NEVER remove CRITICAL issues — only downgrade severity if truly not critical
 - Keep PRAISE issues if they highlight genuinely good patterns
 - If all issues are valid, return unchanged
-- Do not modify issue explanations or fixes — only filter`;
+- Do not modify issue explanations or fixes — only filter
+
+EXAMPLE of correct confidence calibration:
+
+BEFORE (wrong — flags uncertain things as CRITICAL):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [CRITICAL]
+
+AFTER (correct — calibrated severity):
+  Finding: "This might be vulnerable to timing attacks"
+  Severity: [WARNING]  ← downgraded, not certain enough for CRITICAL
+
+RULE TO FOLLOW:
+## CONFIDENCE CALIBRATION
+Before assigning [CRITICAL], answer internally:
+  - Is this concretely exploitable right now, not just theoretically?
+  - Would a senior security engineer agree without hesitation?
+  - Is the vulnerable code actually reachable in this context?
+
+If all three → YES: emit [CRITICAL]
+If any → MAYBE: emit [WARNING]
+If unsure: emit [INFO] or omit entirely
+
+NEVER emit [CRITICAL] for:
+  - Style or naming issues
+  - Performance concerns
+  - Missing best practices that aren't security-relevant
+  - Patterns that look wrong but are context-safe`;
 
 // ── Agent Configurations (Model Cascade + Token Budgeting) ──
 

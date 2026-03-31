@@ -1,21 +1,24 @@
 // app/page.tsx
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Language, detectLanguage } from '@/lib/detectLanguage';
 import { examples } from '@/lib/examples';
 import { useAgentStream } from '@/hooks/useAgentStream';
 import CodePanel, { CodeAnnotation } from '@/components/CodePanel';
 import ReviewPanel from '@/components/ReviewPanel';
 import StatusBar from '@/components/StatusBar';
+import ShortcutsModal from '@/components/ShortcutsModal';
 import { Zap } from 'lucide-react';
 
 export default function Home() {
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState<Language>('other');
   const [highlightedLines, setHighlightedLines] = useState<Set<number>>(new Set());
+  const [activeTab, setActiveTab] = useState<'code' | 'review'>('code');
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
-  const { state: agentState, startStream, abortStream } = useAgentStream();
+  const { state: agentState, startStream, cancelReview } = useAgentStream();
 
   const handleCodeChange = useCallback((newCode: string) => {
     setCode(newCode);
@@ -34,6 +37,7 @@ export default function Home() {
       setCode(example.code);
       setLanguage(example.language);
       setHighlightedLines(new Set());
+      setActiveTab('code');
     },
     []
   );
@@ -47,6 +51,7 @@ export default function Home() {
       lines.add(i);
     }
     setHighlightedLines(lines);
+    setActiveTab('code');
 
     // Clear highlight after 3 seconds
     setTimeout(() => {
@@ -67,18 +72,46 @@ export default function Home() {
   const handleAnalyze = useCallback(async () => {
     if (!code.trim() || agentState.isStreaming) return;
     setHighlightedLines(new Set());
+    setActiveTab('review');
     await startStream(code, language);
   }, [code, language, agentState.isStreaming, startStream]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  const clearCode = useCallback(() => {
+    setCode('');
+    setHighlightedLines(new Set());
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Guard: don't fire shortcuts when typing in textarea/input
+      const tag = (e.target as HTMLElement).tagName.toLowerCase();
+      if (tag === 'textarea' || tag === 'input') return;
+
+      if (e.ctrlKey && e.key === 'Enter') {
         e.preventDefault();
         handleAnalyze();
       }
-    },
-    [handleAnalyze]
-  );
+      if (e.ctrlKey && e.key === 'l') {
+        e.preventDefault();
+        clearCode();
+      }
+      if (e.ctrlKey && e.key === '/') {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      }
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      }
+      if (e.key === 'Escape') {
+        setShowShortcutsModal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleAnalyze, clearCode]);
 
   // Parse annotations from streamed text for inline code markers
   const annotations = useMemo((): CodeAnnotation[] => {
@@ -111,7 +144,6 @@ export default function Home() {
   return (
     <div
       className="h-screen flex flex-col bg-bg-void overflow-hidden"
-      onKeyDown={handleKeyDown}
     >
       {/* Header Bar */}
       <header className="flex items-center justify-between px-4 h-12 bg-bg-surface border-b border-border shrink-0 animate-slide-down">
@@ -121,12 +153,67 @@ export default function Home() {
             PHANTOM
           </h1>
         </div>
+
+        {/* Mobile Tab Switcher (visible only on < 768px) */}
+        <div className="flex md:hidden items-center gap-1">
+          <button
+            onClick={() => setActiveTab('code')}
+            className={`px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider border transition-colors min-h-[44px] ${
+              activeTab === 'code'
+                ? 'border-accent-green text-accent-green bg-accent-green/10'
+                : 'border-border text-text-dim'
+            }`}
+          >
+            ← Code
+          </button>
+          <button
+            onClick={() => setActiveTab('review')}
+            className={`px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider border transition-colors min-h-[44px] ${
+              activeTab === 'review'
+                ? 'border-accent-green text-accent-green bg-accent-green/10'
+                : 'border-border text-text-dim'
+            }`}
+          >
+            Review →
+          </button>
+        </div>
+
+        {/* Analyze Button (desktop) */}
         <button
           onClick={handleAnalyze}
           disabled={!code.trim() || agentState.isStreaming}
           className={`
-            flex items-center gap-2 px-4 py-1.5 text-[11px] font-mono uppercase tracking-wider
+            hidden md:flex items-center gap-2 px-4 py-1.5 text-[11px] font-mono uppercase tracking-wider
             border transition-all duration-200
+            ${
+              agentState.isStreaming
+                ? 'border-accent-green/30 text-accent-green bg-accent-green/10 cursor-not-allowed'
+                : code.trim()
+                ? 'border-accent-green text-accent-green hover:bg-accent-green hover:text-black cursor-pointer'
+                : 'border-border text-text-dim cursor-not-allowed'
+            }
+          `}
+        >
+          {agentState.isStreaming ? (
+            <>
+              <span className="animate-blink">▋</span>
+              ANALYZING...
+            </>
+          ) : (
+            <>
+              ANALYZE
+              <span className="text-text-dim">→</span>
+            </>
+          )}
+        </button>
+
+        {/* Analyze Button (mobile - full width) */}
+        <button
+          onClick={handleAnalyze}
+          disabled={!code.trim() || agentState.isStreaming}
+          className={`
+            md:hidden flex-1 mx-4 flex items-center justify-center gap-2 py-1.5 text-[11px] font-mono uppercase tracking-wider
+            border transition-all duration-200 min-h-[44px]
             ${
               agentState.isStreaming
                 ? 'border-accent-green/30 text-accent-green bg-accent-green/10 cursor-not-allowed'
@@ -151,9 +238,14 @@ export default function Home() {
       </header>
 
       {/* Main Split Layout */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden split-layout">
         {/* Code Input Panel */}
-        <div className="h-1/2 md:h-full md:w-1/2 overflow-hidden animate-fade-in" style={{ animationDelay: '80ms' }}>
+        <div
+          className={`h-1/2 md:h-full md:w-1/2 overflow-hidden animate-fade-in code-panel ${
+            activeTab === 'code' ? 'block' : 'hidden md:block'
+          }`}
+          style={{ animationDelay: '80ms' }}
+        >
           <CodePanel
             code={code}
             language={language}
@@ -167,9 +259,9 @@ export default function Home() {
 
         {/* Review Output Panel */}
         <div
-          className={`h-1/2 md:h-full md:w-1/2 overflow-hidden animate-fade-in ${
-            agentState.isStreaming ? 'border-accent-green/30' : ''
-          }`}
+          className={`h-1/2 md:h-full md:w-1/2 overflow-hidden animate-fade-in review-panel ${
+            activeTab === 'review' ? 'block' : 'hidden md:block'
+          } ${agentState.isStreaming ? 'border-accent-green/30' : ''}`}
           style={{ animationDelay: '160ms' }}
         >
           <ReviewPanel
@@ -179,6 +271,7 @@ export default function Home() {
             onExampleClick={handleExampleClick}
             examples={examples}
             agentState={agentState}
+            language={language}
           />
         </div>
       </main>
@@ -189,6 +282,16 @@ export default function Home() {
         tokens={tokens}
         latency={null}
         isStreaming={agentState.isStreaming}
+        cacheHit={agentState.cacheHit}
+        usedFallback={agentState.usedFallback}
+        fallbackModel={agentState.fallbackModel}
+        liveTokens={agentState.liveTokens}
+      />
+
+      {/* Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={showShortcutsModal}
+        onClose={() => setShowShortcutsModal(false)}
       />
     </div>
   );

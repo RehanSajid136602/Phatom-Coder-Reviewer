@@ -25,8 +25,13 @@ export interface AgentStreamState {
   judgeFiltered: number;
   isStreaming: boolean;
   isComplete: boolean;
+  wasCancelled: boolean;
   score: number | null;
   streamedText: string;
+  liveTokens: number;
+  cacheHit: boolean;
+  usedFallback: boolean;
+  fallbackModel: string | null;
 }
 
 const INITIAL_AGENTS: AgentState[] = [
@@ -89,6 +94,15 @@ const INITIAL_JUDGE: AgentState = {
   error: null,
 };
 
+// djb2 hash for request deduplication
+function djb2(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) + h) + str.charCodeAt(i);
+  }
+  return String(h >>> 0);
+}
+
 export function useAgentStream() {
   const [state, setState] = useState<AgentStreamState>({
     agents: INITIAL_AGENTS.map((a) => ({ ...a })),
@@ -98,11 +112,19 @@ export function useAgentStream() {
     judgeFiltered: 0,
     isStreaming: false,
     isComplete: false,
+    wasCancelled: false,
     score: null,
     streamedText: '',
+    liveTokens: 0,
+    cacheHit: false,
+    usedFallback: false,
+    fallbackModel: null,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const reviewHashRef = useRef<string | null>(null);
+  const charCountRef = useRef(0);
+  const lastUpdateRef = useRef(Date.now());
 
   const resetState = useCallback(() => {
     setState({
@@ -113,18 +135,33 @@ export function useAgentStream() {
       judgeFiltered: 0,
       isStreaming: false,
       isComplete: false,
+      wasCancelled: false,
       score: null,
       streamedText: '',
+      liveTokens: 0,
+      cacheHit: false,
+      usedFallback: false,
+      fallbackModel: null,
     });
+    charCountRef.current = 0;
+    lastUpdateRef.current = Date.now();
   }, []);
 
   const startStream = useCallback(
     async (code: string, language: string) => {
+      // Request deduplication — skip if same code already streaming
+      const hash = djb2(code + language);
+      if (state.isStreaming && hash === reviewHashRef.current) {
+        return;
+      }
+      reviewHashRef.current = hash;
+
       resetState();
 
       setState((prev) => ({
         ...prev,
         isStreaming: true,
+        wasCancelled: false,
         agents: prev.agents.map((a) => ({ ...a, status: 'running' as AgentStatus, startTime: Date.now() })),
       }));
 
@@ -138,6 +175,21 @@ export function useAgentStream() {
           body: JSON.stringify({ code, language }),
           signal: abortController.signal,
         });
+
+        // Cache hit indicator
+        const cacheHit = response.headers.get('X-Cache') === 'HIT';
+        
+        // Fallback model indicator
+        const usedFallback = response.headers.get('X-Used-Fallback') === 'true';
+        const fallbackModel = response.headers.get('X-Model-Used');
+
+        if (cacheHit) {
+          setState((prev) => ({ ...prev, cacheHit: true }));
+        }
+
+        if (usedFallback) {
+          setState((prev) => ({ ...prev, usedFallback: true, fallbackModel }));
+        }
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -158,6 +210,17 @@ export function useAgentStream() {
           const chunk = decoder.decode(value, { stream: true });
           buffer += chunk;
 
+          // Live token counter (throttled to 5 updates/sec)
+          charCountRef.current += chunk.length;
+          const now = Date.now();
+          if (now - lastUpdateRef.current > 200) {
+            setState((prev) => ({
+              ...prev,
+              liveTokens: Math.floor(charCountRef.current / 4),
+            }));
+            lastUpdateRef.current = now;
+          }
+
           // Parse SSE events from buffer
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
@@ -167,7 +230,6 @@ export function useAgentStream() {
             
             // Handle SSE termination signal
             if (trimmed === 'data: [DONE]' || trimmed === '[DONE]') {
-              // Stream complete signal received
               continue;
             }
             
@@ -285,6 +347,7 @@ export function useAgentStream() {
                     ...prev,
                     score: event.score || null,
                     isComplete: true,
+                    liveTokens: Math.floor(charCountRef.current / 4),
                     merger: {
                       ...prev.merger,
                       status: 'complete',
@@ -332,33 +395,43 @@ export function useAgentStream() {
           ...prev,
           isStreaming: false,
           isComplete: true,
+          liveTokens: Math.floor(charCountRef.current / 4),
         }));
       } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
+        const err = error as Error;
+        if (err.name === 'AbortError') {
+          setState((prev) => ({
+            ...prev,
+            isStreaming: false,
+            wasCancelled: true,
+          }));
+        } else {
           console.error('Stream error:', error);
           setState((prev) => ({
             ...prev,
             isStreaming: false,
             streamedText:
               prev.streamedText +
-              `\n\n■ ERROR\nAnalysis failed: ${(error as Error).message}`,
+              `\n\n■ ERROR\nAnalysis failed: ${err.message}`,
           }));
         }
       } finally {
         abortControllerRef.current = null;
+        reviewHashRef.current = null;
       }
     },
-    [resetState]
+    [resetState, state.isStreaming]
   );
 
-  const abortStream = useCallback(() => {
+  const cancelReview = useCallback(() => {
     abortControllerRef.current?.abort();
+    reviewHashRef.current = null;
   }, []);
 
   return {
     state,
     startStream,
-    abortStream,
+    cancelReview,
     resetState,
   };
 }

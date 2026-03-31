@@ -159,21 +159,27 @@ export default function CodePanel({
                   {lineNum}
                   {/* Annotation indicator dot */}
                   {lineAnnotations.length > 0 && (
-                    <button
-                      onClick={() => {
-                        const highestSeverity = lineAnnotations.reduce((highest, a) => {
+                    <div className="absolute left-1 gutter-dot-wrap" data-tip={lineAnnotations.map((a) => `${a.severity}: ${a.title}`).join('\n')}>
+                      <button
+                        onClick={() => {
+                          const highestSeverity = lineAnnotations.reduce((highest, a) => {
+                            const order = { CRITICAL: 0, WARNING: 1, INFO: 2, PRAISE: 3 };
+                            return order[a.severity] < order[highest.severity] ? a : highest;
+                          }, lineAnnotations[0]);
+                          onAnnotationClick?.(highestSeverity);
+                        }}
+                        className={`block w-1.5 h-1.5 rounded-full gutter-dot ${SEVERITY_COLORS[lineAnnotations.reduce((highest, a) => {
                           const order = { CRITICAL: 0, WARNING: 1, INFO: 2, PRAISE: 3 };
                           return order[a.severity] < order[highest.severity] ? a : highest;
-                        }, lineAnnotations[0]);
-                        onAnnotationClick?.(highestSeverity);
-                      }}
-                      className={`absolute left-1 w-1.5 h-1.5 rounded-full ${SEVERITY_COLORS[lineAnnotations.reduce((highest, a) => {
-                        const order = { CRITICAL: 0, WARNING: 1, INFO: 2, PRAISE: 3 };
-                        return order[a.severity] < order[highest.severity] ? a : highest;
-                      }, lineAnnotations[0]).severity]} hover:scale-150 transition-transform cursor-pointer`}
-                      title={lineAnnotations.map((a) => `${a.severity}: ${a.title}`).join('\n')}
-                      aria-label={`${lineAnnotations.length} issue${lineAnnotations.length > 1 ? 's' : ''} on line ${lineNum}`}
-                    />
+                        }, lineAnnotations[0]).severity]} hover:scale-150 transition-transform cursor-pointer`}
+                        aria-label={`${lineAnnotations.length} issue${lineAnnotations.length > 1 ? 's' : ''} on line ${lineNum}`}
+                      />
+                      {lineAnnotations.length > 1 && (
+                        <span className="absolute -top-1 -right-1 text-[8px] font-mono text-text-dim">
+                          +{lineAnnotations.length - 1}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               );
