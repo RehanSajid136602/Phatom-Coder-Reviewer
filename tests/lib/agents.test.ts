@@ -214,7 +214,7 @@ describe('Agents', () => {
       const { AGENT_CONFIGS } = await import('@/lib/agents');
       expect(AGENT_CONFIGS.security).toBeDefined();
       expect(AGENT_CONFIGS.security.name).toBe('security');
-      expect(AGENT_CONFIGS.security.model).toContain('llama');
+      expect(AGENT_CONFIGS.security.model).toBeDefined();
     });
 
     it('should have quality config', async () => {

@@ -156,7 +156,16 @@ NEVER emit [CRITICAL] for:
   - Missing best practices that aren't security-relevant
   - Patterns that look wrong but are context-safe`;
 
-const LANGUAGE_SYSTEM_PROMPT = `You are a language and framework specialist. Identify the language/framework from the code, then conduct a framework-specific review.
+const LANGUAGE_SYSTEM_PROMPT = `You are a language and framework specialist. You will receive code with a SPECIFIED language — review ONLY for that language.
+
+## CRITICAL: LANGUAGE-FOCUSED REVIEW
+The code will be labeled with its language (e.g., "python", "typescript", "rust"). You MUST:
+1. Apply ONLY the framework-specific checks for the specified language
+2. Do NOT flag issues that belong to other languages
+3. If the code is labeled "typescript", check only TypeScript/JavaScript patterns
+4. If the code is labeled "python", check only Python patterns
+5. If the code is labeled "rust", check only Rust patterns
+6. If the code is labeled "other", identify the language from code patterns first
 
 ## FRAMEWORK-SPECIFIC CHECKS
 
@@ -165,10 +174,12 @@ const LANGUAGE_SYSTEM_PROMPT = `You are a language and framework specialist. Ide
 - Missing cleanup in useEffect, conditional hooks, hook call order violations
 - Missing 'use client' directive for client components in Next.js
 - Server Component anti-patterns, cache invalidation problems
+- Missing response.ok check after fetch() calls — must verify HTTP status before processing
 
 ### JavaScript/TypeScript + Node.js
 - Missing error handling middleware, improper async error handling, missing request validation
 - CORS misconfiguration, missing rate limiting
+- Missing response.ok check after fetch() calls — must verify HTTP status before processing
 
 ### Python
 - Missing type hints, mutable default arguments, not using context managers (with)
@@ -468,7 +479,7 @@ async function callAgent(
 
   // Preprocess code with line numbers for accurate issue references
   const codeWithLines = addLineNumbers(code);
-  const userPrompt = 'Review this ' + language + ' code (line numbers are provided for reference):\n\n```' + language + '\n' + codeWithLines + '\n```';
+  const userPrompt = 'LANGUAGE: ' + language.toUpperCase() + '\n\nReview this ' + language + ' code (line numbers are provided for reference). Apply ONLY rules for ' + language + ':\n\n```' + language + '\n' + codeWithLines + '\n```';
   const startTime = Date.now();
 
   // Try primary model, then fallback

@@ -26,8 +26,8 @@ Surgical-precision AI-powered code review tool that analyzes your code for secur
 
 ```bash
 # Clone the repository
-git clone https://github.com/RehanSajid136602/Phatom-Coder-Reviewer.git
-cd Phatom-Coder-Reviewer
+git clone https://github.com/RehanSajid136602/Phantom-Code-Reviewer.git
+cd Phantom-Code-Reviewer
 
 # Install dependencies
 npm install

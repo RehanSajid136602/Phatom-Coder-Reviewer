@@ -1,6 +1,8 @@
 // app/api/review/route.ts
 import { NextRequest } from 'next/server';
 import { gatherRAGContext, formatRAGContext } from '@/lib/webSearch';
+import { detectLanguage } from '@/lib/detectLanguage';
+import { sanitizeCodeInput } from '@/lib/sanitize';
 import {
   callSecurityScanner,
   callQualityReviewer,
@@ -42,22 +44,6 @@ function validateApiKey(key: string | undefined): string | null {
     return 'NVIDIA_API_KEY appears to be too short. Check your key at https://build.nvidia.com.';
   }
   return null;
-}
-
-/**
- * Sanitize code input to prevent prompt injection attacks
- * Removes potential malicious patterns while preserving legitimate code
- */
-function sanitizeCodeInput(code: string): string {
-  // Remove null bytes
-  let sanitized = code.replace(/\0/g, '');
-
-  // Limit to max length (already validated, but double-check)
-  if (sanitized.length > 50000) {
-    sanitized = sanitized.slice(0, 50000);
-  }
-
-  return sanitized;
 }
 
 function countIssues(content: string): number {
@@ -107,6 +93,13 @@ export async function POST(req: NextRequest) {
       'INVALID_LANGUAGE',
       400
     );
+  }
+
+  // ── Layer 2.5: Validate detected language matches submitted language ──
+  const detectedLanguage = detectLanguage(sanitizedCode);
+  if (detectedLanguage !== 'other' && detectedLanguage !== language) {
+    console.warn(`[PHANTOM API] Language mismatch: submitted="${language}", detected="${detectedLanguage}"`);
+    // Log warning but proceed - user might know better (e.g., embedding Python in JS)
   }
 
   // ── Layer 3: Validate API key ──
