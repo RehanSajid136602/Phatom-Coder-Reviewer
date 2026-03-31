@@ -224,15 +224,28 @@ export function useAgentStream() {
         const decoder = new TextDecoder();
         let accumulated = '';
         let buffer = '';
+        let shouldStop = false;
 
-        while (true) {
+        while (!shouldStop) {
           // Check if stream was aborted
           if (abortController.signal.aborted) {
             break;
           }
 
-          const { done, value } = await reader.read();
+          // Read with timeout to prevent hanging
+          const readPromise = reader.read();
+          const timeoutPromise = new Promise<{ done: true; value: undefined }>((resolve) => {
+            setTimeout(() => resolve({ done: true, value: undefined }), 3000);
+          });
+
+          const { done, value } = await Promise.race([readPromise, timeoutPromise]);
+          
           if (done) break;
+          if (!value) {
+            // Timeout occurred
+            shouldStop = true;
+            break;
+          }
 
           const chunk = decoder.decode(value, { stream: true });
           buffer += chunk;
@@ -384,6 +397,7 @@ export function useAgentStream() {
                     },
                   }));
                   isStreamingRef.current = false;
+                  shouldStop = true; // Exit the read loop
                   break;
                 }
 
@@ -410,8 +424,8 @@ export function useAgentStream() {
           }
         }
 
-        // Process any remaining buffer
-        if (buffer) {
+        // Process any remaining buffer (only if not already stopped by review_complete)
+        if (buffer && !shouldStop) {
           const trimmedBuffer = buffer.trim();
           // Handle [DONE] signal in buffer
           if (trimmedBuffer !== 'data: [DONE]' && trimmedBuffer !== '[DONE]') {
@@ -421,7 +435,7 @@ export function useAgentStream() {
         }
 
         // Only mark as complete if not already marked (by review_complete event)
-        if (isStreamingRef.current) {
+        if (isStreamingRef.current && !shouldStop) {
           setState((prev) => ({
             ...prev,
             isStreaming: false,
