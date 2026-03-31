@@ -366,11 +366,21 @@ NEVER emit [CRITICAL] for:
   - Patterns that look wrong but are context-safe`;
 
 // ── Agent Configurations (Model Cascade + Token Budgeting) ──
+// 
+// Model Selection Rationale (based on 2026 benchmarks):
+// - GLM-4.7 (z-ai/glm4.7): 355B total/32B active params, best-in-class for security analysis
+//   and deep reasoning. Excels at vulnerability detection and exploit path analysis.
+// - Llama 3.3 70B: Strong general-purpose reasoning, excellent for quality assessment
+//   and code smell detection. Balanced performance for code review tasks.
+// - Qwen2.5-Coder-32B: Code-specialized model with strong multilingual support.
+//   Optimized for framework-specific patterns and language idioms.
+// - Devstral 2 123B: Agentic coding specialist with 256K context.
+//   Excels at multi-file orchestration and synthesis tasks (merger).
 
 export const AGENT_CONFIGS: Record<AgentName, AgentConfig> = {
   security: {
     name: 'security',
-    model: 'meta/llama-3.1-405b-instruct',
+    model: 'z-ai/glm4.7',           // Strongest reasoning for security analysis
     fallbackModel: 'meta/llama-3.3-70b-instruct',
     systemPrompt: SECURITY_SYSTEM_PROMPT,
     temperature: 0.1,
@@ -379,8 +389,8 @@ export const AGENT_CONFIGS: Record<AgentName, AgentConfig> = {
   },
   quality: {
     name: 'quality',
-    model: 'meta/llama-3.3-70b-instruct',
-    fallbackModel: 'meta/llama-3.1-70b-instruct',
+    model: 'meta/llama-3.3-70b-instruct',  // Best for quality assessment
+    fallbackModel: 'qwen/qwen2.5-coder-32b-instruct',
     systemPrompt: QUALITY_SYSTEM_PROMPT,
     temperature: 0.1,
     maxTokens: 2000,
@@ -388,8 +398,8 @@ export const AGENT_CONFIGS: Record<AgentName, AgentConfig> = {
   },
   language: {
     name: 'language',
-    model: 'qwen/qwen2.5-coder-32b-instruct',
-    fallbackModel: 'meta/llama-3.1-8b-instruct',
+    model: 'qwen/qwen2.5-coder-32b-instruct',  // Code-specialized
+    fallbackModel: 'meta/llama-3.3-70b-instruct',
     systemPrompt: LANGUAGE_SYSTEM_PROMPT,
     temperature: 0.1,
     maxTokens: 2000,
@@ -397,12 +407,15 @@ export const AGENT_CONFIGS: Record<AgentName, AgentConfig> = {
   },
 };
 
-const MERGER_MODEL = 'meta/llama-3.1-405b-instruct';
+// Merger: Devstral 2 (agentic coding, multi-file synthesis)
+const MERGER_MODEL = 'mistralai/devstral-2-123b-instruct-2512';
+const MERGER_FALLBACK_MODEL = 'meta/llama-3.3-70b-instruct';
 const MERGER_MAX_TOKENS = 4000;
 const MERGER_TIMEOUT_MS = 180000;
 
+// Judge: Llama 3.3 70B (reliable filtering)
 const JUDGE_MODEL = 'meta/llama-3.3-70b-instruct';
-const JUDGE_FALLBACK_MODEL = 'meta/llama-3.1-70b-instruct';
+const JUDGE_FALLBACK_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
 const JUDGE_MAX_TOKENS = 1500;
 const JUDGE_TIMEOUT_MS = 60000;
 
@@ -677,79 +690,98 @@ export async function callMergerAgent(
 
   const mergerPrompt = '---AGENT1---\n' + (agent1Content || 'AGENT_FAILED') + '\n---AGENT2---\n' + (agent2Content || 'AGENT_FAILED') + '\n---AGENT3---\n' + (agent3Content || 'AGENT_FAILED');
 
-  const response = await fetch(NVIDIA_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + apiKey,
-    },
-    body: JSON.stringify({
-      model: MERGER_MODEL,
-      messages: [
-        { role: 'system', content: MERGER_SYSTEM_PROMPT },
-        { role: 'user', content: mergerPrompt },
-      ],
-      temperature: 0.0,
-      max_tokens: MERGER_MAX_TOKENS,
-      stream: true,
-    }),
-    signal: AbortSignal.timeout(MERGER_TIMEOUT_MS),
-  });
+  // Try primary model, then fallback
+  for (const model of [MERGER_MODEL, MERGER_FALLBACK_MODEL]) {
+    try {
+      const response = await fetch(NVIDIA_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + apiKey,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: MERGER_SYSTEM_PROMPT },
+            { role: 'user', content: mergerPrompt },
+          ],
+          temperature: 0.0,
+          max_tokens: MERGER_MAX_TOKENS,
+          stream: true,
+        }),
+        signal: AbortSignal.timeout(MERGER_TIMEOUT_MS),
+      });
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error('Merger agent HTTP ' + response.status + ': ' + errorText.slice(0, 200));
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error('Merger agent returned no stream');
-  }
-
-  return new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            controller.close();
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-            const data = trimmed.slice(6);
-            if (data === '[DONE]') {
-              controller.close();
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
-                controller.enqueue(encoder.encode(content));
-              }
-            } catch {
-              // Skip invalid JSON
-            }
-          }
+      if (!response.ok) {
+        console.error('[MERGER_FAIL] model=' + model + ' status=' + response.status);
+        if (model === MERGER_MODEL) {
+          console.log('[MERGER_FALLBACK] trying ' + MERGER_FALLBACK_MODEL);
+          continue;
         }
-      } catch (error) {
-        controller.error(error);
+        const errorText = await response.text().catch(() => '');
+        throw new Error('Merger agent HTTP ' + response.status + ': ' + errorText.slice(0, 200));
       }
-    },
-  });
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Merger agent returned no stream');
+      }
+
+      return new ReadableStream({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                controller.close();
+                break;
+              }
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+                const data = trimmed.slice(6);
+                if (data === '[DONE]') {
+                  controller.close();
+                  return;
+                }
+
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    controller.enqueue(encoder.encode(content));
+                  }
+                } catch {
+                  // Skip invalid JSON
+                }
+              }
+            }
+          } catch (error) {
+            controller.error(error);
+          }
+        },
+      });
+    } catch (error) {
+      console.error('[MERGER_FAIL] model=' + model + ' error=' + (error as Error).message);
+      if (model === MERGER_MODEL) {
+        console.log('[MERGER_FALLBACK] trying ' + MERGER_FALLBACK_MODEL);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error('All merger models failed');
 }
 
 // ── Public Agent Functions ──
