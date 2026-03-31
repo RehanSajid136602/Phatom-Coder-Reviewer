@@ -272,6 +272,7 @@ export default function Home() {
             examples={examples}
             agentState={agentState}
             language={language}
+            onCancel={cancelReview}
           />
         </div>
       </main>

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface AgentProgressProps {
   state: AgentStreamState;
+  onCancel?: () => void;
 }
 
 const AGENT_STATUS_MESSAGES: Record<number, string[]> = {
@@ -78,7 +79,7 @@ function TimelineBar({
   );
 }
 
-export default function AgentProgress({ state }: AgentProgressProps) {
+export default function AgentProgress({ state, onCancel }: AgentProgressProps) {
   const { agents, merger, judge, totalRawIssues, judgeFiltered, isStreaming, isComplete, score, streamedText } = state;
   const [isMinimized, setIsMinimized] = useState(false);
 
@@ -175,7 +176,7 @@ export default function AgentProgress({ state }: AgentProgressProps) {
         <span>PHANTOM ANALYSIS</span>
         {isStreaming && (
           <button
-            onClick={() => {/* TODO: cancel review */}}
+            onClick={onCancel}
             className="text-[10px] px-2 py-0.5 border border-accent-red/40 text-accent-red hover:bg-accent-red/10 transition-colors"
           >
             ✕ Cancel

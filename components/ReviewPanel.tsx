@@ -21,6 +21,7 @@ interface ReviewPanelProps {
   examples: Example[];
   agentState?: AgentStreamState;
   language?: string;
+  onCancel?: () => void;
 }
 
 type AgentStatus = 'pending' | 'running' | 'complete' | 'failed';
@@ -483,6 +484,7 @@ export default function ReviewPanel({
   examples,
   agentState,
   language = 'unknown',
+  onCancel,
 }: ReviewPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasStarted, setHasStarted] = useState(false);
@@ -569,7 +571,7 @@ export default function ReviewPanel({
       </div>
 
       {/* Agent Progress Panel */}
-      {agentState && <AgentProgress state={agentState} />}
+      {agentState && <AgentProgress state={agentState} onCancel={onCancel} />}
 
       {/* Content */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-6">
