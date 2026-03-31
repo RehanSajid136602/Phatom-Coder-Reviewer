@@ -62,6 +62,13 @@ npx jest --testPathPattern="components/CodePanel"
 - Trailing commas in multi-line objects/arrays.
 - Semicolons required.
 - Max line length: 120 characters (enforced by ESLint).
+- File path comment on line 1: `// src/components/example.tsx`
+
+### React Patterns
+- Use `'use client'` directive for components with state/effects.
+- Prefer `useCallback` for event handlers passed to child components.
+- Use `useMemo` for expensive computations, not for every object.
+- Prefer composition over context for non-auth state (use Zustand for global state).
 
 ### Error Handling
 - **API routes**: Return proper HTTP status codes with JSON error bodies.
@@ -71,13 +78,33 @@ npx jest --testPathPattern="components/CodePanel"
 
 ## Architecture
 
+### Core Files
 - `app/page.tsx` — Client component (`'use client'`), orchestrates all state. NOT a server component.
 - `app/api/review/route.ts` — POST endpoint. Calls NVIDIA NIM API via raw fetch with streaming. Requires `NVIDIA_API_KEY`.
-- `lib/webSearch.ts` — DuckDuckGo HTML scraping for context gathering.
+- `app/layout.tsx` — Root layout with font injection (`DM_Mono`, `Instrument_Serif`).
+- `app/globals.css` — Tailwind v4 config with CSS variables, theme mapping, animations.
+
+### Library Files
+- `lib/webSearch.ts` — DuckDuckGo HTML scraping + RAG pipeline with OSV.dev security advisories.
 - `lib/parseReview.ts` — Parses streamed AI output into sections. Handles AI typos (e.g., `'ISSUUES'`).
-- `lib/detectLanguage.ts` — Regex scoring system for language detection.
-- `lib/agents.ts` — Multi-agent orchestration logic.
-- `hooks/useAgentStream.ts` — Custom hook for streaming state management.
+- `lib/detectLanguage.ts` — Regex scoring system for language detection. TypeScript bonus over JS.
+- `lib/agents.ts` — Multi-agent orchestration with Judge agent for filtering.
+- `lib/cache.ts` — Multi-tier in-memory caching (50MB limit, LRU eviction).
+- `lib/examples.ts` — Sample code snippets for demo.
+
+### Components
+- `components/CodePanel.tsx` — Code input with syntax highlighting, language selector, inline annotations.
+- `components/ReviewPanel.tsx` — Review output with progressive disclosure, collapsible sections.
+- `components/AgentProgress.tsx` — Progress bar showing agent stages.
+- `components/StatusBar.tsx` — Bottom status bar with model, tokens, latency.
+- `components/SeverityBadge.tsx` — Color-coded severity indicators.
+- `components/LineRefChip.tsx` — Clickable line reference chips.
+
+### Hooks
+- `hooks/useAgentStream.ts` — Custom hook for streaming state management, handles API calls.
+
+### Types
+- `types/review.ts` — TypeScript interfaces for ReviewResult, AgentState, CacheEntry, RAGResult.
 
 ## Non-Obvious Patterns
 
@@ -88,6 +115,17 @@ npx jest --testPathPattern="components/CodePanel"
 - **Hydration quirk**: Disabled button renders `disabled={null}` on SSR, `disabled={true}` on client with empty code. Known React 19 behavior — not a bug.
 - **Path alias**: `@/*` maps to project root.
 - **No navbar/footer**: Full-viewport split layout. Header is 48px, status bar is 32px.
+- **Judge Agent**: Filters low-signal findings, outputs `Note: [INFO] issues were removed because they scored low`.
+- **Cache performance**: Exact-match cache provides ~3300x speedup on repeat reviews (89s → 0.027s).
+
+## UI/UX Patterns
+
+- **Dark theme**: `#0a0a0f` background, glassmorphism surfaces.
+- **Severity colors**: CRITICAL=red (`#ff4444`), WARNING=yellow (`#f5a623`), INFO=blue (`#4a9eff`), PRAISE=green (`#00ff88`).
+- **Framer Motion**: Use for complex interactions, CSS keyframes for simple loaders.
+- **Progressive disclosure**: Collapsible sections in ReviewPanel for clean output.
+- **Inline annotations**: Severity dots in CodePanel gutter linking to issues.
+- **Status bar**: Fixed 32px at bottom, shows model, token count, latency.
 
 ## Testing
 
@@ -96,10 +134,22 @@ npx jest --testPathPattern="components/CodePanel"
 - Jest config in `jest.config.js` — uses ts-jest with jsdom environment.
 - Setup file: `tests/setup.ts` — mocks TextEncoder/TextDecoder, ReadableStream, IntersectionObserver, ResizeObserver, navigator.clipboard.
 - Coverage threshold: 50% across branches, functions, lines, statements.
+- Pre-existing test issues: jest-dom type errors in some test files (don't fix, unrelated to source code).
 
 ## Environment
 
 ```bash
 # Required in .env.local
 NVIDIA_API_KEY=nvapi-...   # Get from https://build.nvidia.com
+
+# Optional - Custom model (default: meta/llama-3.1-405b-instruct)
+NVIDIA_MODEL=meta/llama-3.1-405b-instruct
 ```
+
+## Gotchas
+
+- **API errors surface in review panel**: Non-2xx responses display as `■ ERROR` — check server logs.
+- **Web search failures are silent**: Check server logs, not client.
+- **Stream errors append to text**: Visible as `\n\n[ERROR] message` in review panel.
+- **Line highlight auto-clears**: After 3 seconds — expected behavior, not a bug.
+- **Build warnings**: `themeColor` metadata warning — ignore, doesn't affect functionality.

@@ -164,7 +164,21 @@ export function useAgentStream() {
 
           for (const line of lines) {
             const trimmed = line.trim();
-            if (!trimmed.startsWith('data: ')) continue;
+            
+            // Handle SSE termination signal
+            if (trimmed === 'data: [DONE]' || trimmed === '[DONE]') {
+              // Stream complete signal received
+              continue;
+            }
+            
+            if (!trimmed.startsWith('data: ')) {
+              // Non-SSE line - treat as raw content
+              if (trimmed) {
+                accumulated += trimmed + '\n';
+                setState((prev) => ({ ...prev, streamedText: accumulated }));
+              }
+              continue;
+            }
 
             const data = trimmed.slice(6);
 
@@ -306,8 +320,12 @@ export function useAgentStream() {
 
         // Process any remaining buffer
         if (buffer) {
-          accumulated += buffer;
-          setState((prev) => ({ ...prev, streamedText: accumulated }));
+          const trimmedBuffer = buffer.trim();
+          // Handle [DONE] signal in buffer
+          if (trimmedBuffer !== 'data: [DONE]' && trimmedBuffer !== '[DONE]') {
+            accumulated += buffer;
+            setState((prev) => ({ ...prev, streamedText: accumulated }));
+          }
         }
 
         setState((prev) => ({
