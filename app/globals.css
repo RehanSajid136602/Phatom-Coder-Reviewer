@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+:root {
+  --bg-void: #0a0a0a;
+  --bg-surface: #111111;
+  --bg-elevated: #1a1a1a;
+  --bg-card: #161616;
+  --bg-code: #0d1117;
+  --border: #1f1f1f;
+  --border-bright: #2a2a2a;
+  --text-primary: #f0ede6;
+  --text-body: #c8c8c8;
+  --text-muted: #888888;
+  --text-dim: #666666;
+  --accent-green: #00ff88;
+  --accent-red: #ff4444;
+  --accent-yellow: #f5a623;
+  --accent-blue: #4a9eff;
+  --accent-green-dim: #00cc66;
+  --critical-bg: #3d0000;
+  --warning-bg: #2d2000;
+  --info-bg: #001a2d;
+  --praise-bg: #001a0d;
+}
+
+@theme inline {
+  --color-bg-void: var(--bg-void);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-card: var(--bg-card);
+  --color-bg-code: var(--bg-code);
+  --color-border: var(--border);
+  --color-border-bright: var(--border-bright);
+  --color-text-primary: var(--text-primary);
+  --color-text-body: var(--text-body);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+  --color-accent-green: var(--accent-green);
+  --color-accent-red: var(--accent-red);
+  --color-accent-yellow: var(--accent-yellow);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-green-dim: var(--accent-green-dim);
+  --color-critical-bg: var(--critical-bg);
+  --color-warning-bg: var(--warning-bg);
+  --color-info-bg: var(--info-bg);
+  --color-praise-bg: var(--praise-bg);
+  --font-mono: var(--font-dm-mono), ui-monospace, monospace;
+  --font-serif: var(--font-instrument-serif), serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-void);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
+}
+
+::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-bright);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes typeIn {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-blink {
+  animation: blink 1s infinite;
+}
+
+.animate-slide-down {
+  animation: slideDown 150ms ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 150ms ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 300ms ease-out forwards;
+}
+
+.animate-pulse-stream {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.line-highlight {
+  background: var(--bg-elevated);
+  border-left: 2px solid var(--accent-green);
+}
+
+.focus-glow:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent-green);
+}
+
+.custom-textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) var(--bg-surface);
+}
+
+.custom-textarea::selection {
+  background: var(--accent-green);
+  color: var(--bg-void);
+}
+
+.custom-textarea::-webkit-scrollbar {
+  width: 2px;
+}
+
+.custom-textarea::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+.custom-textarea::-webkit-scrollbar-thumb {
+  background: var(--border-bright);
+}
+
+/* Section header left border accent */
+.section-header {
+  border-left: 2px solid var(--accent-green);
+  padding-left: 12px;
+}
+
+/* Issue card severity left borders */
+.issue-card-critical {
+  border-left: 3px solid var(--accent-red);
+}
+
+.issue-card-warning {
+  border-left: 3px solid var(--accent-yellow);
+}
+
+.issue-card-info {
+  border-left: 3px solid var(--accent-blue);
+}
+
+.issue-card-praise {
+  border-left: 3px solid var(--accent-green-dim);
+}
+
+/* Code suggestion blocks */
+.code-block {
+  background: var(--bg-code);
+  border-left: 3px solid var(--accent-green);
+}
+
+/* Review panel inner glow */
+.review-glow {
+  box-shadow: inset 0 0 40px rgba(0, 255, 136, 0.03);
+}
