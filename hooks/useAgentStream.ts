@@ -472,17 +472,36 @@ export function useAgentStream() {
   );
 
   const cancelReview = useCallback(() => {
+    // Abort any ongoing HTTP request immediately
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    
+    // Immediately stop the streaming ref
     isStreamingRef.current = false;
-    // Update state immediately so UI responds
-    setState((prev) => ({
-      ...prev,
+    
+    // Immediately update state so UI responds instantly
+    setState({
+      agents: INITIAL_AGENTS.map((a) => ({ ...a, status: 'idle' as AgentStatus, startTime: null, endTime: null, duration: null, issueCount: 0, error: null })),
+      merger: { ...INITIAL_MERGER, status: 'idle', startTime: null, endTime: null, duration: null },
+      judge: { ...INITIAL_JUDGE, status: 'idle', startTime: null, endTime: null, duration: null },
+      totalRawIssues: 0,
+      judgeFiltered: 0,
       isStreaming: false,
+      isComplete: false,
       wasCancelled: true,
-    }));
+      score: null,
+      streamedText: '',  // Clear any accumulated text
+      liveTokens: 0,
+      cacheHit: false,
+      usedFallback: false,
+      fallbackModel: null,
+    });
+    
+    // Reset refs
+    charCountRef.current = 0;
+    lastUpdateRef.current = Date.now();
   }, []);
 
   return {
