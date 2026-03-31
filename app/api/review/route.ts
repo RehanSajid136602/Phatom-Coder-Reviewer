@@ -13,6 +13,7 @@ import {
 } from '@/lib/agents';
 import { getCachedReview, setCachedReview } from '@/lib/cache';
 import { AgentResult, AgentName, ApiErrorCode, ErrorResponse } from '@/types/review';
+import { endConcurrentRequest } from '@/middleware';
 
 const VALID_LANGUAGES = [
   'python',
@@ -46,6 +47,22 @@ function validateApiKey(key: string | undefined): string | null {
   return null;
 }
 
+function getClientIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) {
+    return realIp;
+  }
+
+  // Fallback: use a combination of headers as identifier
+  const userAgent = request.headers.get('user-agent') || 'unknown';
+  return `unknown-${userAgent.slice(0, 50)}`;
+}
+
 function countIssues(content: string): number {
   if (!content || content === 'NO_ISSUES') return 0;
   const matches = content.match(/\[(CRITICAL|WARNING|INFO|PRAISE)\]/g);
@@ -53,6 +70,8 @@ function countIssues(content: string): number {
 }
 
 export async function POST(req: NextRequest) {
+  const clientIp = getClientIp(req);
+
   // ── Layer 1: Parse request body ──
   let body: unknown;
   try {
@@ -121,6 +140,7 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < cachedResult.length; i += chunkSize) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'merger_chunk', text: cachedResult.slice(i, i + chunkSize) })}\n\n`));
         }
+        endConcurrentRequest(clientIp);
         controller.close();
       },
     });
@@ -248,6 +268,7 @@ export async function POST(req: NextRequest) {
         // All 3 failed
         if (successfulAgents.length === 0) {
           sendEvent('error', { message: 'All review agents unavailable. Please try again.' });
+          endConcurrentRequest(clientIp);
           controller.close();
           return;
         }
@@ -265,6 +286,7 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'merger_chunk', text: text.slice(i, i + chunkSize) })}\n\n`));
           }
           sendEvent('review_complete', { score: null, judgeFiltered: 0 });
+          endConcurrentRequest(clientIp);
           controller.close();
           return;
         }
@@ -338,6 +360,7 @@ export async function POST(req: NextRequest) {
           setCachedReview(sanitizedCode, language, 'full-review', 'v2', finalText);
 
           sendEvent('review_complete', { score, judgeFiltered });
+          endConcurrentRequest(clientIp);
           controller.close();
         } catch (mergerError) {
           console.error('[PHANTOM API] Merger failed, falling back to concatenation:', (mergerError as Error).message);
@@ -352,11 +375,13 @@ export async function POST(req: NextRequest) {
           }
 
           sendEvent('review_complete', { score: null, judgeFiltered: 0 });
+          endConcurrentRequest(clientIp);
           controller.close();
         }
       } catch (error) {
         console.error('[PHANTOM API] Pipeline error:', error);
         sendEvent('error', { message: (error as Error).message || 'Unknown error' });
+        endConcurrentRequest(clientIp);
         controller.close();
       }
     },
